@@ -1,5 +1,6 @@
 import { useState } from "react";
 import jsQR from "jsqr";
+import { BrowserQRCodeReader } from "@zxing/browser";
 
 function parseTLV(str) {
   let i = 0;
@@ -84,28 +85,44 @@ export default function Home() {
     const img = new Image();
     img.src = URL.createObjectURL(file);
 
-    img.onload = () => {
+    img.onload = async () => {
+    try {
+      const scale = 3;
       const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
       const ctx = canvas.getContext("2d");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0, img.width, img.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, canvas.width, canvas.height);
+      if (!code) {
+        try {
+          const reader = new BrowserQRCodeReader();
+          const resultZXing = await reader.decodeFromImageElement(img);
+          code = { data: resultZXing.text };
+        } catch (err) {
+          console.warn("ZXing juga gagal:", err);
+        }
+      }
 
-      if (code) {
+      if (code && code.data) {
         const parsed = parsePayNowQR(code.data);
         setResult(parsed);
       } else {
-        setResult({ error: "QR tidak terbaca" });
+        setResult({ error: "QR tidak terbaca, coba foto lebih jelas/tegak lurus" });
       }
-    };
+    } catch (error) {
+      console.error("Error saat proses QR:", error);
+      setResult({ error: "Terjadi kesalahan saat membaca QR" });
+    }
   };
+};
+
 
   return (
     <div className="p-6">
-      <input type="file" onChange={handleFile} className="mb-4" />
+      <input type="file" accept="image/*" onChange={handleFile} className="mb-4" />
 
       {result && (
         <div className="mt-6">
