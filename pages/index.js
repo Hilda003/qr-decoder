@@ -39,7 +39,8 @@ function parsePayNowQR(raw) {
 
   for (let t = 26; t <= 51; t++) {
     const key = t.toString().padStart(2, "0");
-    if (tlv[key]) {
+    if (!tlv[key]) continue;
+
       const merchantInfo = parseTLV(tlv[key]);
       if ((merchantInfo["00"] || "").toUpperCase() === "SG.PAYNOW") {
         payNowId = merchantInfo["00"];
@@ -53,23 +54,24 @@ function parsePayNowQR(raw) {
             default: proxyType = "Unknown";
           }
         }
-    }
-        // Proxy number
+
+      // Proxy number
     if (merchantInfo["02"]) {
         proxyNumber = merchantInfo["02"];
     }
 
-    // Expired Date
+     // Expired Date
     if (merchantInfo["04"]) {
       const rawDate = merchantInfo["04"];
-      if (rawDate.length >= 14) {
-        const year = rawDate.substring(0, 4);
-        const month = rawDate.substring(4, 6);
-        const day = rawDate.substring(6, 8);
-        const hour = rawDate.substring(8, 10);
-        const min = rawDate.substring(10, 12);
-        const sec = rawDate.substring(12, 14);
+      if (rawDate.length >= 8) {
+        const year = rawDate.slice(0, 4);
+        const month = rawDate.slice(4, 6);
+        const day   = rawDate.slice(6, 8);
+        const hour  = rawDate.slice(8, 10) || "00";
+        const min   = rawDate.slice(10, 12) || "00";
+        const sec   = rawDate.slice(12, 14) || "00";
         expiredDate = `${year}-${month}-${day} ${hour}:${min}:${sec}`;
+        }
       }
     }
   }
@@ -87,8 +89,6 @@ function parsePayNowQR(raw) {
 
   // Transaction amount
   const amount = tlv["54"] || "-";
-
-  // Reference number (tag 62 -> sub 01)
   let reference = "-";
   if (tlv["62"]) {
     const refInfo = parseTLV(tlv["62"]);
@@ -108,7 +108,6 @@ function parsePayNowQR(raw) {
     amount,
     reference
   };
-}
 }
 
 
