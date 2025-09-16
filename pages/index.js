@@ -17,13 +17,50 @@ function parseTLV(str) {
 }
 
 function parsePayNowQR(raw) {
-  const tlv = parseTLV(raw);
-// Qr Type
+  const normalized = raw.trim();
+  const tlv = parseTLV(normalized);
   let qrType = "UNKNOWN";
-  if (/SG\.PAYNOW/i.test(raw)) {
-    qrType = "PAYNOW";
-  } else if (/SGQR/i.test(raw)) {
+  let merchantInfos = [];
+  for (let t = 26; t <= 51; t++) {
+    const key = t.toString().padStart(2, "0");
+    if (!tlv[key]) continue;
+    const merchantInfo = parseTLV(tlv[key]);
+
+    if (merchantInfo["00"]) {
+      merchantInfos.push({
+        tag: key,
+        type: merchantInfo["00"].toUpperCase(),
+        data: merchantInfo
+      });
+    }
+  }
+  if (merchantInfos.some(m => m.type.includes("SG.COM.NETS"))) {
+    qrType = "NETS";
+  } else if (merchantInfos.some(m => m.type.includes("SG.SGQR"))) {
     qrType = "SGQR";
+  } else if (merchantInfos.some(m => m.type.includes("SG.PAYNOW"))) {
+    qrType = "PAYNOW";
+  } else if (/^NETSQPAY/.test(normalized)) {
+    qrType = "NETS"; // fallback format lama
+  }
+  if (qrType === "NETS") {
+    let merchantName = "-";
+    const match = normalized.match(/([A-Z0-9\s]+)([A-F0-9]{4})$/);
+    if (match) merchantName = match[1].trim();
+
+    return {
+      raw,
+      qrType,
+      qrMode: "-",
+      payNowId: "-",
+      proxyType: "-",
+      proxyNumber: "-",
+      expiredDate: "-",
+      casLookup: merchantName,
+      qrStatus: "VALID",
+      amount: "-",
+      reference: "-"
+    };
   }
 
   const tag01 = tlv["01"] || "-";
@@ -37,32 +74,24 @@ function parsePayNowQR(raw) {
   let proxyNumber = "-";
   let expiredDate = "-";
 
-  for (let t = 26; t <= 51; t++) {
-    const key = t.toString().padStart(2, "0");
-    if (!tlv[key]) continue;
+  const paynowMerchant = merchantInfos.find(m => m.type === "SG.PAYNOW");
+  if (paynowMerchant) {
+    const mi = paynowMerchant.data;
+    payNowId = mi["00"];
 
-      const merchantInfo = parseTLV(tlv[key]);
-      if ((merchantInfo["00"] || "").toUpperCase() === "SG.PAYNOW") {
-        payNowId = merchantInfo["00"];
-        // Proxy type
-        if (merchantInfo["01"]) {
-          switch (merchantInfo["01"]) {
-            case "0": proxyType = "Mobile"; break;
-            case "1": proxyType = "NRIC"; break;
-            case "2": proxyType = "UEN"; break;
-            case "3": proxyType = "VPA"; break;
-            default: proxyType = "Unknown";
-          }
-        }
-
-      // Proxy number
-    if (merchantInfo["02"]) {
-        proxyNumber = merchantInfo["02"];
+    if (mi["01"]) {
+      switch (mi["01"]) {
+        case "0": proxyType = "Mobile"; break;
+        case "1": proxyType = "NRIC"; break;
+        case "2": proxyType = "UEN"; break;
+        case "3": proxyType = "VPA"; break;
+        default: proxyType = "Unknown";
+      }
     }
 
-     // Expired Date
-    if (merchantInfo["04"]) {
-      const rawDate = merchantInfo["04"];
+    if (mi["02"]) proxyNumber = mi["02"];
+    if (mi["04"]) {
+      const rawDate = mi["04"];
       if (rawDate.length >= 8) {
         const year = rawDate.slice(0, 4);
         const month = rawDate.slice(4, 6);
@@ -71,7 +100,6 @@ function parsePayNowQR(raw) {
         const min   = rawDate.slice(10, 12) || "00";
         const sec   = rawDate.slice(12, 14) || "00";
         expiredDate = `${year}-${month}-${day} ${hour}:${min}:${sec}`;
-        }
       }
     }
   }
@@ -109,7 +137,6 @@ function parsePayNowQR(raw) {
     reference
   };
 }
-
 
 
 export default function Home() {
